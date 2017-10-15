@@ -2,9 +2,11 @@
 """
 Created on Mon May 29 19:08:59 2017
 
-@author: dad
+@author: M  Telfer
+
+Process walking signals 
 """
-featureList = ['jitter_x',
+featureList1 = ['jitter_x',
                    'jitter_y',
                    'jitter_z',
                    'jitter_m',
@@ -13,8 +15,7 @@ featureList = ['jitter_x',
                    'mcr_z',
                    'mcr_m',
                    'mean_x',
-                   'mean_y',
-                   'mean_z',
+                   'mean_y',                   'mean_z',
                    'mean_m',
                    'std_x','std_y','std_z',
                    'std_m',
@@ -28,9 +29,27 @@ featureList = ['jitter_x',
                    'acvm_s','acvm_s','acvm_s','acvm_s',
                    'skew_x','skew_y','skew_z','skew_m',
                    'kurt_x','kurt_y','kurt_z','kurt_m',
-                   'sqrt_x','sqrt_y','sqrt_z','sqrt_m',
-                   'age','gender','profDiag','updrs']
+                   'sqrt_x','sqrt_y','sqrt_z','sqrt_m'
+                   ]
+featuresGait = ['number_of_steps',
+                             'cadence',
+                             'velocity',
+                             'avg_step_length',
+                             'avg_stride_length',
+                             'avg_step_duration',
+                             'sd_step_durations',
+                             'avg_number_of_strides',
+                             'avg_stride_duration',
+                             'sd_stride_durations',
+                             'step_regularity',
+                             'stride_regularity',
+                             'symmetry']
+featureList2 = ['age','gender','diagnosed','updrs2_12','healthCode']
+# 3 has added prob of diagosed PD from audio 
+featureList3 = ['age','gender','audioProb','diagnosed','updrs2_12','healthCode'] 
+featureList = featureList1 + featuresGait + featureList3
 
+#%%
 def magnitude(activity):
     x2 = activity['x']*activity['x']
     y2 = activity['y']*activity['y']
@@ -42,7 +61,7 @@ def magnitude(activity):
 
 def windows(df, size=100):
     start = 0
-    while start < df.count()-50:
+    while start < df.count()-size//2:
         yield start, start + size
         start += (size // 2)
         
@@ -99,9 +118,16 @@ def window_summary(axis, start, end):
         kurtosis(axis[start:end]),
         math.sqrt(sqd_error.mean())
     ]
-
-def features(activity):
-    for (start, end) in windows(activity['timestamp']):
+def getMeanFeatures(df,size=100):
+   '''input df has x,y,z, magnitude build dataframe and get means, std  ''' 
+    # for each window, ad series to df 
+   for (start, end) in windows(df['timestamp']):
+       features = []
+       for axis in ['x', 'y', 'z', 'magnitude']:
+           features += window_summary(df[axis], start, end)
+        
+def features(activity,windowSize=100):
+    for (start, end) in windows(activity['timestamp'],size=windowSize):
         features = []
         for axis in ['x', 'y', 'z', 'magnitude']:
             features += window_summary(activity[axis], start, end)

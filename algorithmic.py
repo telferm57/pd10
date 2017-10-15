@@ -11,15 +11,41 @@ import synsigp as sp
 import numpy as np
 import matplotlib
 import matplotlib.pyplot as plt
-imp.reload(sp)
+import itertools
+import datetime
+import pickle
+from synapse1 import setGlobals
+
+imp.reload(cfg)
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
+from sklearn.neural_network import MLPClassifier
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.svm import SVC
+from sklearn.gaussian_process import GaussianProcessClassifier
+from sklearn.gaussian_process.kernels import RBF
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.ensemble import RandomForestClassifier, AdaBoostClassifier
+from sklearn.naive_bayes import GaussianNB
+from sklearn.discriminant_analysis import QuadraticDiscriminantAnalysis
+from sklearn import preprocessing
+from sklearn.metrics import confusion_matrix, log_loss 
+min_max_scaler = preprocessing.MinMaxScaler()
+from sklearn.pipeline import Pipeline
+from sklearn.svm import LinearSVC
+from sklearn.feature_selection import SelectFromModel
+from sklearn.ensemble import ExtraTreesClassifier
 
 # not used on voice  sp.featureList
 
 # load into pd for clean-up
-audioPath = '/audio/features/cleanedaudioFeatures.csv'
+audioPath = 'audio\\audio_audio\\2\\features\\cleanedaudioFeatures.csv'
 df = pd.read_csv(cfg.WRITE_PATH + audioPath)
 df.columns
 df.shape
+df.isnull().sum()
+df.healthCode.nunique()
+
 #df.columns=sp.featureList - now in header 
 # map diagnosoed to 1/0 
 df.diagnosed = df.diagnosed.map({True:1,False:0})
@@ -54,7 +80,7 @@ features = X.columns.values
 
 X = X.values
 X[0,20:]
-
+X.shape
 
 #%% multiple classifiers - find the best 
 # http://scikit-learn.org/stable/auto_examples/classification/plot_classifier_comparison.html
@@ -102,42 +128,79 @@ results_mcc = {}
 results_cm = {}
 results_cv ={} 
 all_results = {}
-min_max_scaler = preprocessing.MinMaxScaler()
-global X_minmax
-X_minmax = min_max_scaler.fit_transform(X)
-X_minmax[1:10,:]
 
 
-X_new = X_minmax
-datasets = {'X':X,'minmax':X_minmax,'reduced':X_new}
-global fff
-fff = X_new
-from sklearn.metrics import confusion_matrix    
-from sklearn.metrics import matthews_corrcoef,fbeta_score, make_scorer
-ftwo_scorer = make_scorer(fbeta_score, beta=2)
-from sklearn.model_selection import cross_val_score
-mc_scorer = make_scorer(matthews_corrcoef)
-def calcScores(datasets):
-    for key, item in datasets.items():
-       
-        for name, clf in zip(names, classifiers):
-       # X_train, X_test, y_train, y_test = train_test_split(X_new, y, test_size=.3)
-       # clf.fit(X_train, y_train)
-        #score = clf.score(X_test, y_test)
-        #y_pred= clf.predict(X_test)
-        #len(y_pred)
-            results_mcc[name] = cross_val_score(clf, item, y, cv=5,scoring=mc_scorer)
-   
-        all_results[key]= results_mcc.copy()
+def calcScores(df,series,joinClasses,target,clfNames,classifiers,
+               clfName=0,varT=0): 
     
-calcScores(datasets) 
+    ''' clfName - to limit scores to one clf  
+        varT - low variance threshold '''
+    X, y, features = splitFeatureDF(df,excludeFields[series],joinClasses,target)
+    #todo remove collinear (see below - manual at the moment)
+    Xlow, selectedLowVar = removeLowVariance(X,varT) # 0,015 for walk reduces to 30 - got by experimentation
+    Xlow, importances = drExtraTrees(X, y) # use extratrees to get most important feats 
+    print('number of features femoved with var < ',varT,X[0].size - Xlow[0].size)
+    print(pd.Series(y).value_counts())
+        # compare each classifier on same split 
+    X_train, X_test, y_train, y_test = train_test_split(Xlow, y, test_size=.3)
+    
+    for name, clf in zip(clfNames, classifiers):
+        if clfName:
+            if name != clfName: continue
+            
+        print('processing :',name)   
+        clf.set_params(**prf1[name])
+        if name == 'svc': clf.set_params(probability=True)
+        clf.fit(X_train, y_train)
+        score = clf.score(X_test, y_test)
+        y_pred= clf.predict(X_test)
+        y_proba = clf.predict_proba(X_test)
+        len(y_proba)
+        y_favoured = getFavouredClass(y_pred,y_proba)
+        y_ord = getOrdClass(clf,X_train, X_test,y_train,y_test)
+        y_ord.shape
+        
+        favhist = np.histogram(y_favoured,bins=[-1,0,1,2,3,4])
+        predhist = np.histogram(y_pred,bins=[-1,0,1,2,3,4])
+        ordhist = np.histogram(y_ord,bins=[-1,0,1,2,3,4])
+      #  for a in y_proba[:10]:print(a)
+      #  y_favoured[:10]
+        precision, recall, fscore, support = scoreAll(y_test, y_pred)
+        print('precision: {}'.format(precision))
+        print('recall: {}'.format(recall))
+        print('fscore: {}'.format(fscore))
+        print('support: {}'.format(support))
+        f1_macro=f1_score(y_test, y_pred,average='macro')
+        f1_macro_fav =f1_score(y_test, y_favoured, average='macro')
+        f1_macro_ord =f1_score(y_test, y_ord, average='macro')
+        mad_rate = sum(abs(y_pred-y_test))/len(y_test) # mean absolute deviation
+        mad_rate_f = sum(abs(y_favoured-y_test))/len(y_test)
+        mad_rate_o = sum(abs(y_ord-y_test))/len(y_test)
+        # normailsed mad rate ? at the moment favouring populous classes 
+        #df_test.shape
+        #y_pred_hc, y_test_hc = majorityScore(y_pred,df_test)
+        cm = confusion_matrix(y_test,y_pred)
+        cmf = confusion_matrix(y_test,y_favoured)
+        cmo = confusion_matrix(y_test,y_ord)
+        logloss = log_loss(y_test,y_proba)
+    
+        cm_hc = None # only for multiple records per healthCode 
 
-for key, value  in all_results.items():
-    print(key)
-    for key2, value2 in value.items():
-       # print(value2)
-       # print(value2.mean())
-        print(' %15s mean %1.2f std %1.2f'% (key2,value2.mean(),value2.std()))
+   
+       # cm_hc = confusion_matrix(y_test_hc,y_pred_hc)
+    #len(y_pred)
+    #results_mcc[name] = cross_val_score(clf, item, y, cv=5,scoring=mc_scorer)
+        timeNow = datetime.datetime.now().isoformat(' ', 'seconds') 
+        if name in all_series_results.keys():
+            all_series_results[name].update({series:[timeNow, logloss, cm,
+                              cmf,cmo,mad_rate,mad_rate_f,mad_rate_o]})
+         
+        else: #new algorithm - add to results dict 
+            all_series_results[name] = {series:[timeNow, logloss,f1_macro, cm, 
+                              cmf,cmo,mad_rate,mad_rate_f,mad_rate_o]}            
+        pickle.dump(all_series_results,
+                    open('all_results_series_pickle_' + series,"wb"))   
+        print('Completed :',name, 'time:', timeNow)   
     
 
 #%% experiment with feature selection 

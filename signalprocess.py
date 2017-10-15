@@ -11,12 +11,12 @@ import pandas as pd
 import numpy as np
 import cfg
 cfg.WRITE_PATH
-file1 = "accel_walking_outbound.json.items5390212.csv5"
+file1 = "accel_walking_return-test-1.csv"
 file2 = 'accel_walking_rest.json.items5388181.csv5'
 file3 = 'accel_walking_return.json.items5388132.csv5'
 import os
 cwd = os.getcwd()
-walkout=pd.read_csv(cfg.WRITE_PATH+file1,header=0)
+walkout=pd.read_json(cfg.WRITE_PATH+'/testfiles/' +file1)
 walkout.columns
 walkout=walkout[['timestamp','x','y','z']]
 walkrest=pd.read_csv(cfg.WRITE_PATH+file2,header=0)
@@ -46,7 +46,7 @@ def plot_activity(activity):
     plt.show()
     
 plot_activity(walkout)
-plot_activity(walkrest)
+#plot_activity(walkrest)
 #%% calc magnitude of vector 
 
 import math
@@ -61,16 +61,21 @@ def magnitude(activity):
     return m
 
 walkout['magnitude'] = magnitude(walkout) 
-walkrest['magnitude'] = magnitude(walkrest) 
+#walkrest['magnitude'] = magnitude(walkrest) 
 
 def plot_magnitudes(activities, titles):
-    fig, axs = plt.subplots(nrows=len(activities), figsize=(15, 15))
+    activities =[walkout]
+    titles = ['walkout']
+    fig, axs = plt.subplots(nrows=len(activities), figsize=(15, 15), squeeze=False)
+    axs.shape
     for i in range(0, len(activities)):
+        print('ededededed',i)
+        i=0
         plot_axis(axs[i], activities[i]['timestamp'], activities[i]['magnitude'], titles[i])
     plt.subplots_adjust(hspace=0.2)
     plt.show()
 
-plot_magnitudes([walkout,walkrest],['walkout','walkrest'])
+plot_magnitudes([walkout],['walkout'])
 #%%
 def windows(df, size=100):
     start = 0
@@ -168,8 +173,8 @@ def features(activity):
         yield features
         #import csv
 #%%
-activities = [walkout, walkrest]
-
+#activities = [walkout, walkrest]
+activities = [walkout]
 import csv
 
 

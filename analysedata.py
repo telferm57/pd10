@@ -17,7 +17,7 @@ import pickle
 import gatherdata as syn1
 from gatherdata import setGlobals
 
-#imp.reload(synapse1)
+#imp.reload(gatherdata)
 from sklearn.model_selection import train_test_split, cross_val_score
 from sklearn.preprocessing import StandardScaler
 from sklearn.preprocessing import OneHotEncoder
