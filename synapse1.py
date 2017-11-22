@@ -43,6 +43,7 @@ import synsigrest
 from mhealthx.signals import compute_sample_rate
 import mhealthx.signals
 imp.reload(mhealthx.signals)
+os.getcwd()
 logging.INFO
 cfg.DEMOG
 
